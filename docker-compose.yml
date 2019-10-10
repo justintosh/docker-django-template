@@ -1,0 +1,67 @@
+version: '3'
+
+services:
+    django:
+        build: .
+        command: gunicorn -b 0.0.0.0:8000 -w 4 site_project.wsgi # <-- for production, 4 workers
+        volumes:
+            - ./site_project:/home/site_project
+        expose:
+            - 8000
+        depends_on: # <-- wait for mysql to be "ready" before starting this service
+            - mysql
+        networks:
+            - nginx_network
+            - mysql_network
+    nginx:
+        restart: always
+        image: nginx:1.13
+        ports:
+            - 9080:8000
+#            - 80:8000
+#            - 443:443
+        volumes:
+            - ./config/nginx/conf.d:/etc/nginx/conf.d # <-- for using non-SSL
+#            - ./config/nginx-ssl/conf.d:/etc/nginx/conf.d <-- for using SSL
+#            - ./config/ssl/your_domain.com.crt:/etc/nginx/your_domain.com.crt # <-- your SSL certificate here
+#            - ./config/ssl/your_domain.com.key:/etc/nginx/your_domain.com.key # <-- your key here
+            - ./logs:/home/site_project/logs
+            - ./site_project/media:/home/site_project/media
+            - ./site_project/static:/home/site_project/static
+        depends_on:  # <-- wait for django to be "ready" before starting this service
+            - django
+        networks:
+            - nginx_network
+    mysql:
+        image: mysql:5.7
+        volumes:
+            - ./mysql/data:/var/lib/mysql
+            - ./mysql/dump:/docker-entrypoint-initdb.d
+        restart: always
+        environment:
+            MYSQL_ROOT_PASSWORD: P@ssw0rd
+            MYSQL_DATABASE: site_db
+            MYSQL_USER: site_db
+            MYSQL_PASSWORD: P@ssw0rd
+        command: ['mysqld', '--character-set-server=utf8', '--collation-server=utf8_unicode_ci']
+        ports:
+            - 3306:3306
+        networks:
+            - mysql_network
+    phpmyadmin:
+        depends_on:
+            - mysql
+        image: phpmyadmin/phpmyadmin
+        restart: always
+        ports:
+            - 9090:80
+        environment:
+            PMA_HOST: mysql
+            MYSQL_ROOT_PASSWORD: P@ssw0rd
+        networks:
+            - mysql_network
+networks:
+    nginx_network:
+        driver: bridge
+    mysql_network:
+        driver: bridge
